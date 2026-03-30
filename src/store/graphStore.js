@@ -10,6 +10,7 @@ export const graphStore = reactive({
     nodes: {},
   },
   zoomLevel: 1,
+  graphMode: "all",
 
   serviceMap: {},
 

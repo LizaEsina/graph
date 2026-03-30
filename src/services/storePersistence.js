@@ -16,6 +16,7 @@ export function createGraphStoreSnapshot(store) {
     edges: store.edges,
     layouts: store.layouts,
     zoomLevel: store.zoomLevel,
+    graphMode: store.graphMode,
     serviceMap: store.serviceMap,
     selectedNode: store.selectedNode,
     focusedNodes: serializeSet(store.focusedNodes),
@@ -48,6 +49,7 @@ export function hydrateGraphStore(store) {
     store.edges = snapshot.edges || {};
     store.layouts = snapshot.layouts || { nodes: {} };
     store.zoomLevel = snapshot.zoomLevel || 1;
+    store.graphMode = snapshot.graphMode || "all";
     store.serviceMap = snapshot.serviceMap || {};
     store.selectedNode = snapshot.selectedNode || null;
     store.selectedService = store.selectedNode ? store.serviceMap[store.selectedNode] || null : null;

@@ -2,6 +2,15 @@
 import { computed, ref, watch } from "vue";
 import { graphStore } from "../store/graphStore";
 
+defineProps({
+  open: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+defineEmits(["close"]);
+
 const activeTab = ref("yaml");
 
 function escapeHtml(value) {
@@ -26,69 +35,190 @@ function renderMarkdown(markdown) {
     return "<p>README отсутствует</p>";
   }
 
-  const normalized = markdown.replace(/\r\n/g, "\n");
-  const codeBlocks = [];
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const html = [];
 
-  let prepared = normalized.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, language, code) => {
-    const index = codeBlocks.push({
-      language: escapeHtml(language || ""),
-      code: escapeHtml(code.trim()),
-    }) - 1;
+  let inCodeBlock = false;
+  let codeLanguage = "";
+  let codeBuffer = [];
+  let listType = null;
+  let listBuffer = [];
+  let quoteBuffer = [];
+  let tableBuffer = [];
+  let paragraphBuffer = [];
 
-    return `@@CODEBLOCK_${index}@@`;
+  const flushParagraph = () => {
+    if (!paragraphBuffer.length) return;
+    html.push(`<p>${formatInlineMarkdown(paragraphBuffer.join(" ")).replace(/\n/g, "<br>")}</p>`);
+    paragraphBuffer = [];
+  };
+
+  const flushList = () => {
+    if (!listBuffer.length || !listType) return;
+    html.push(`<${listType}>${listBuffer.join("")}</${listType}>`);
+    listBuffer = [];
+    listType = null;
+  };
+
+  const flushQuote = () => {
+    if (!quoteBuffer.length) return;
+    html.push(`<blockquote>${formatInlineMarkdown(quoteBuffer.join(" "))}</blockquote>`);
+    quoteBuffer = [];
+  };
+
+  const flushTable = () => {
+    if (!tableBuffer.length) return;
+
+    const rows = tableBuffer
+      .filter((line) => !/^\|\s*[:-]+/.test(line.trim()))
+      .map((line) =>
+      line
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+    );
+
+    if (!rows.length) {
+      tableBuffer = [];
+      return;
+    }
+
+    const [header, ...body] = rows;
+    const thead = `<thead><tr>${header
+      .map((cell) => `<th>${formatInlineMarkdown(cell)}</th>`)
+      .join("")}</tr></thead>`;
+    const tbody = body.length
+      ? `<tbody>${body
+          .map(
+            (row) =>
+              `<tr>${row.map((cell) => `<td>${formatInlineMarkdown(cell)}</td>`).join("")}</tr>`
+          )
+          .join("")}</tbody>`
+      : "";
+
+    html.push(`<table>${thead}${tbody}</table>`);
+    tableBuffer = [];
+  };
+
+  const flushCode = () => {
+    if (!codeBuffer.length && !codeLanguage) return;
+    const language = codeLanguage ? `<div class="md-code-lang">${escapeHtml(codeLanguage)}</div>` : "";
+    html.push(
+      `<pre class="md-code-block">${language}<code>${escapeHtml(codeBuffer.join("\n"))}</code></pre>`
+    );
+    codeLanguage = "";
+    codeBuffer = [];
+  };
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine.trimEnd();
+
+    if (line.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeLanguage = line.replace(/```/, "").trim();
+      } else {
+        inCodeBlock = false;
+        flushCode();
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(rawLine);
+      return;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+      return;
+    }
+
+    if (/^\|(.+)\|$/.test(line)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      tableBuffer.push(line);
+      return;
+    }
+
+    if (/^[-*_]{3,}$/.test(line.trim())) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+      html.push("<hr>");
+      return;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+      const level = heading[1].length;
+      html.push(`<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`);
+      return;
+    }
+
+    if (line.startsWith(">")) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      quoteBuffer.push(line.replace(/^>\s?/, ""));
+      return;
+    }
+
+    if (/^- /.test(line)) {
+      flushParagraph();
+      flushQuote();
+      flushTable();
+      if (listType && listType !== "ul") {
+        flushList();
+      }
+      listType = "ul";
+      listBuffer.push(`<li>${formatInlineMarkdown(line.replace(/^- /, "").trim())}</li>`);
+      return;
+    }
+
+    if (/^\d+\. /.test(line)) {
+      flushParagraph();
+      flushQuote();
+      flushTable();
+      if (listType && listType !== "ol") {
+        flushList();
+      }
+      listType = "ol";
+      listBuffer.push(`<li>${formatInlineMarkdown(line.replace(/^\d+\. /, "").trim())}</li>`);
+      return;
+    }
+
+    flushList();
+    flushQuote();
+    flushTable();
+    paragraphBuffer.push(line);
+
+    if (index === lines.length - 1) {
+      flushParagraph();
+    }
   });
 
-  const blocks = prepared
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean);
+  flushParagraph();
+  flushList();
+  flushQuote();
+  flushTable();
+  flushCode();
 
-  const html = blocks
-    .map((block) => {
-      if (/^@@CODEBLOCK_\d+@@$/.test(block)) {
-        const index = Number(block.match(/\d+/)?.[0]);
-        const item = codeBlocks[index];
-        const language = item.language ? `<div class="md-code-lang">${item.language}</div>` : "";
-        return `<pre class="md-code-block">${language}<code>${item.code}</code></pre>`;
-      }
-
-      if (block.startsWith(">")) {
-        const content = block
-          .split("\n")
-          .map((line) => line.replace(/^>\s?/, ""))
-          .join(" ");
-        return `<blockquote>${formatInlineMarkdown(content)}</blockquote>`;
-      }
-
-      if (/^- /.test(block)) {
-        const items = block
-          .split("\n")
-          .map((line) => line.replace(/^- /, "").trim())
-          .map((line) => `<li>${formatInlineMarkdown(line)}</li>`)
-          .join("");
-        return `<ul>${items}</ul>`;
-      }
-
-      if (/^\d+\. /.test(block)) {
-        const items = block
-          .split("\n")
-          .map((line) => line.replace(/^\d+\. /, "").trim())
-          .map((line) => `<li>${formatInlineMarkdown(line)}</li>`)
-          .join("");
-        return `<ol>${items}</ol>`;
-      }
-
-      const heading = block.match(/^(#{1,6})\s+(.+)$/);
-      if (heading) {
-        const level = heading[1].length;
-        return `<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`;
-      }
-
-      return `<p>${formatInlineMarkdown(block).replace(/\n/g, "<br>")}</p>`;
-    })
-    .join("");
-
-  return html;
+  return html.join("");
 }
 
 const renderedReadme = computed(() => renderMarkdown(graphStore.selectedService?.readmeRaw));
@@ -102,10 +232,15 @@ watch(
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ hidden: !open }">
     <div v-if="graphStore.selectedNode">
-      <p class="sidebar-eyebrow">Текущий фокус</p>
-      <h2 class="sidebar-title">{{ graphStore.selectedNode }}</h2>
+      <div class="sidebar-header">
+        <div>
+          <p class="sidebar-eyebrow">Текущий фокус</p>
+          <h2 class="sidebar-title">{{ graphStore.selectedNode }}</h2>
+        </div>
+        <button class="sidebar-close" type="button" @click="$emit('close')">Скрыть</button>
+      </div>
 
       <div v-if="!graphStore.selectedService">
         <div class="empty-card">
@@ -148,6 +283,10 @@ watch(
     </div>
 
     <div v-else class="empty-card">
+      <div class="sidebar-header">
+        <p class="sidebar-eyebrow">Детали</p>
+        <button class="sidebar-close" type="button" @click="$emit('close')">Скрыть</button>
+      </div>
       Выберите ноду на графе. Сервис окажется в фокусе, а справа откроются YAML и README.
     </div>
   </aside>

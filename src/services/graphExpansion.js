@@ -66,23 +66,31 @@ function walkDependencies(fullNodes, fullEdges, nodeId, depth, nodes, edges, vis
   });
 }
 
-export function createBaseGraph(fullNodes, fullEdges) {
-  const nodes = {};
-  const edges = {};
+function createAllGraph(fullNodes, fullEdges) {
+  return {
+    nodes: { ...fullNodes },
+    edges: { ...fullEdges },
+  };
+}
 
-  Object.entries(fullNodes).forEach(([id, node]) => {
-    if (!node.ghost) {
-      nodes[id] = node;
-    }
-  });
-
-  Object.entries(fullEdges).forEach(([id, edge]) => {
-    if (nodes[edge.source] && nodes[edge.target]) {
-      edges[id] = edge;
-    }
-  });
+function createFocusGraph(fullNodes, fullEdges) {
+  const nodes = Object.fromEntries(
+    Object.entries(fullNodes).filter(([, node]) => !node.ghost)
+  );
+  const visibleNodeIds = new Set(Object.keys(nodes));
+  const edges = Object.fromEntries(
+    Object.entries(fullEdges).filter(
+      ([, edge]) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    )
+  );
 
   return { nodes, edges };
+}
+
+export function createBaseGraph(fullNodes, fullEdges, mode = "all") {
+  return mode === "focus"
+    ? createFocusGraph(fullNodes, fullEdges)
+    : createAllGraph(fullNodes, fullEdges);
 }
 
 export function expandGraphFromNode(fullNodes, fullEdges, currentNodes, currentEdges, nodeId, depth) {

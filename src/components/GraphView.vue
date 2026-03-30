@@ -5,6 +5,12 @@ import { createFocusLayouts, createGridLayouts, getFocusState } from "../service
 import { graphStore } from "../store/graphStore";
 
 const graphRef = ref(null);
+let clickTimer = null;
+let lastClickedNode = null;
+const GRAPH_MODES = [
+  { id: "all", label: "Все связи" },
+  { id: "focus", label: "Фокус" },
+];
 
 const COLORS = [
   "#7cc8c6",
@@ -18,20 +24,19 @@ const COLORS = [
 ];
 
 function isFocusedNode(nodeId) {
+  if (graphStore.graphMode !== "focus") {
+    return true;
+  }
+
   return graphStore.focusedNodes.size === 0 || graphStore.focusedNodes.has(nodeId);
 }
 
 function isFocusedEdge(edgeId) {
+  if (graphStore.graphMode !== "focus") {
+    return true;
+  }
+
   return graphStore.focusedEdges.size === 0 || graphStore.focusedEdges.has(edgeId);
-}
-
-function getLabelScaleFactor() {
-  const zoom = graphStore.zoomLevel || 1;
-  return Math.max(0.78, Math.min(1, 0.78 + (zoom - 0.25) * 0.16));
-}
-
-function getScaledFontSize(baseSize) {
-  return Math.round(baseSize * getLabelScaleFactor());
 }
 
 function getEdgeColor(edge) {
@@ -51,22 +56,71 @@ function getEdgeColor(edge) {
   }
 }
 
+function formatEdgeLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  return text
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function getServiceSearchText(nodeId) {
+  const service = graphStore.serviceMap[nodeId];
+  const node = graphStore.nodes[nodeId];
+
+  if (!service) {
+    return "";
+  }
+
+  return normalizeText([
+    service.name,
+    service.id,
+    service.rawId,
+    node?.name,
+    nodeId,
+  ].filter(Boolean).join(" "));
+}
+
 const displayNodeIds = computed(() => {
   const query = normalizeText(graphStore.searchQuery);
-  const ids = Object.keys(graphStore.nodes);
+  const ids =
+    graphStore.graphMode === "focus" &&
+    graphStore.selectedNode &&
+    graphStore.focusedNodes.size > 0
+      ? Array.from(graphStore.focusedNodes).filter((id) => graphStore.nodes[id])
+      : Object.keys(graphStore.nodes);
 
   if (!query) {
     return ids;
   }
 
-  return ids.filter((id) => {
-    const node = graphStore.nodes[id];
-    return normalizeText(node.name || id).includes(query);
+  const matchedServiceIds = ids.filter((id) => getServiceSearchText(id).includes(query));
+
+  if (matchedServiceIds.length === 0) {
+    return [];
+  }
+
+  const visibleIds = new Set(matchedServiceIds);
+
+  Object.values(graphStore.edges).forEach((edge) => {
+    if (!ids.includes(edge.source) || !ids.includes(edge.target)) {
+      return;
+    }
+
+    if (visibleIds.has(edge.source) || visibleIds.has(edge.target)) {
+      visibleIds.add(edge.source);
+      visibleIds.add(edge.target);
+    }
   });
+
+  return ids.filter((id) => visibleIds.has(id));
 });
 
 const displayNodes = computed(() =>
@@ -90,10 +144,12 @@ const displayLayouts = computed(() => ({
 }));
 
 function updateLayouts(focusNodeId = null) {
+  const targetFocusNodeId = graphStore.graphMode === "focus" ? focusNodeId : null;
+
   graphStore.layouts = {
-    nodes: focusNodeId
-      ? createFocusLayouts(graphStore.nodes, graphStore.edges, focusNodeId)
-      : createGridLayouts(graphStore.nodes),
+    nodes: targetFocusNodeId
+      ? createFocusLayouts(graphStore.nodes, graphStore.edges, targetFocusNodeId)
+      : createGridLayouts(graphStore.nodes, graphStore.edges),
   };
 }
 
@@ -102,38 +158,39 @@ async function fitGraph() {
   graphRef.value?.fitToContents({ margin: 80 });
 }
 
-function applyFocus(nodeId) {
-  const { focusedNodes, focusedEdges } = getFocusState(nodeId, graphStore.edges);
-
+function applySelection(nodeId) {
   graphStore.selectedNode = nodeId;
   graphStore.selectedService = graphStore.serviceMap[nodeId] || null;
-  graphStore.focusedNodes = focusedNodes;
-  graphStore.focusedEdges = focusedEdges;
-
-  updateLayouts(nodeId);
-  fitGraph();
 }
 
-function handleNodeClick({ node }) {
-  applyFocus(node);
+function clearFocusState() {
+  graphStore.focusedNodes = new Set();
+  graphStore.focusedEdges = new Set();
 }
 
-function handleNodeDoubleClick({ node }) {
-  expandNode(node);
-  applyFocus(node);
-}
-
-function expandNode(nodeId) {
-  const nextDepth = (graphStore.expandedDepths[nodeId] || 0) + 1;
-  const { nodes: baseNodes, edges: baseEdges } = createBaseGraph(
+function rebuildGraphForMode(mode) {
+  const { nodes, edges } = createBaseGraph(
     graphStore.fullNodes,
-    graphStore.fullEdges
+    graphStore.fullEdges,
+    mode
   );
 
-  const expandedDepths = {
-    ...graphStore.expandedDepths,
-    [nodeId]: nextDepth,
-  };
+  graphStore.nodes = nodes;
+  graphStore.edges = edges;
+}
+
+function rebuildFocusGraph(selectedNodeId = null, selectedDepth = 0) {
+  const { nodes: baseNodes, edges: baseEdges } = createBaseGraph(
+    graphStore.fullNodes,
+    graphStore.fullEdges,
+    "focus"
+  );
+
+  const expandedDepths = { ...graphStore.expandedDepths };
+
+  if (selectedNodeId && selectedDepth > 0) {
+    expandedDepths[selectedNodeId] = Math.max(expandedDepths[selectedNodeId] || 0, selectedDepth);
+  }
 
   let nodes = baseNodes;
   let edges = baseEdges;
@@ -158,15 +215,95 @@ function expandNode(nodeId) {
   graphStore.edges = edges;
 }
 
+function applyFocus(nodeId) {
+  const { focusedNodes, focusedEdges } = getFocusState(nodeId, graphStore.edges);
+
+  applySelection(nodeId);
+  graphStore.focusedNodes = focusedNodes;
+  graphStore.focusedEdges = focusedEdges;
+
+  updateLayouts(nodeId);
+  fitGraph();
+}
+
+function selectNode(nodeId) {
+  applySelection(nodeId);
+
+  if (graphStore.graphMode === "focus") {
+    rebuildFocusGraph(nodeId, 1);
+    applyFocus(nodeId);
+    return;
+  }
+
+  clearFocusState();
+}
+
+function setGraphMode(mode) {
+  if (graphStore.graphMode === mode) {
+    return;
+  }
+
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+
+  lastClickedNode = null;
+  graphStore.graphMode = mode;
+  graphStore.selectedNode = null;
+  graphStore.selectedService = null;
+  graphStore.expandedNodes = new Set();
+  graphStore.expandedDepths = {};
+  rebuildGraphForMode(mode);
+  clearFocusState();
+  updateLayouts();
+  fitGraph();
+}
+
+function handleNodeClick({ node }) {
+  if (graphStore.graphMode === "focus" && clickTimer && lastClickedNode === node) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+    lastClickedNode = null;
+    expandNode(node);
+    selectNode(node);
+    return;
+  }
+
+  lastClickedNode = node;
+  clickTimer = setTimeout(() => {
+    selectNode(node);
+    clickTimer = null;
+    lastClickedNode = null;
+  }, 220);
+}
+
+function expandNode(nodeId) {
+  const currentDepth = Math.max(graphStore.expandedDepths[nodeId] || 1, 1);
+  const nextDepth = currentDepth + 1;
+
+  rebuildFocusGraph(nodeId, nextDepth);
+  updateLayouts(graphStore.graphMode === "focus" ? graphStore.selectedNode : null);
+}
+
 function resetGraph() {
-  const { nodes, edges } = createBaseGraph(graphStore.fullNodes, graphStore.fullEdges);
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+
+  lastClickedNode = null;
+  const { nodes, edges } = createBaseGraph(
+    graphStore.fullNodes,
+    graphStore.fullEdges,
+    graphStore.graphMode
+  );
 
   graphStore.nodes = nodes;
   graphStore.edges = edges;
   graphStore.selectedNode = null;
   graphStore.selectedService = null;
-  graphStore.focusedNodes = new Set();
-  graphStore.focusedEdges = new Set();
+  clearFocusState();
   graphStore.expandedNodes = new Set();
   graphStore.expandedDepths = {};
   updateLayouts();
@@ -175,7 +312,6 @@ function resetGraph() {
 
 const eventHandlers = {
   "node:click": handleNodeClick,
-  "node:dblclick": handleNodeDoubleClick,
 };
 
 const configs = {
@@ -183,6 +319,7 @@ const configs = {
     autoPanAndZoomOnLoad: "fit-content",
     fitContentMargin: 80,
     autoPanOnResize: true,
+    doubleClickZoomEnabled: false,
     scalingObjects: false,
     minZoomLevel: 0.25,
     maxZoomLevel: 4,
@@ -218,17 +355,14 @@ const configs = {
       text: (node) => node.name || node.id,
       fontFamily: "'Avenir Next', 'Segoe UI', sans-serif",
       fontSize: (node) => {
-        if (graphStore.selectedNode === node.id) return getScaledFontSize(13);
-        if (isFocusedNode(node.id)) return getScaledFontSize(node.ghost ? 9 : 10);
-        return getScaledFontSize(8);
+        if (graphStore.selectedNode === node.id) return 12;
+        if (isFocusedNode(node.id)) return node.ghost ? 9 : 10;
+        return 8;
       },
       color: () => "#111111",
-      background: (node) => ({
-        visible: true,
-        color: isFocusedNode(node.id) ? "rgba(255, 255, 255, 0.99)" : "rgba(255, 255, 255, 0.98)",
-        padding: { vertical: 3, horizontal: 8 },
-        borderRadius: 12,
-      }),
+      background: {
+        visible: false,
+      },
       lineHeight: 1.2,
       direction: "south",
       directionAutoAdjustment: true,
@@ -276,6 +410,8 @@ const configs = {
       },
     },
     label: {
+      visible: false,
+      text: "label",
       fontFamily: "'Avenir Next', 'Segoe UI', sans-serif",
       fontSize: 10,
       color: "#55697f",
@@ -303,9 +439,23 @@ const configs = {
           placeholder="Поиск сервиса"
         />
       </label>
+      <div class="graph-mode-tabs" role="tablist" aria-label="Режим отображения графа">
+        <button
+          v-for="mode in GRAPH_MODES"
+          :key="mode.id"
+          class="graph-mode-tab"
+          :class="{ active: graphStore.graphMode === mode.id }"
+          type="button"
+          role="tab"
+          :aria-selected="graphStore.graphMode === mode.id"
+          @click="setGraphMode(mode.id)"
+        >
+          {{ mode.label }}
+        </button>
+      </div>
       <div class="legend-card">
         <span class="legend-dot primary"></span>
-        <span>Клик: сфокусировать сервис</span>
+        <span>Клик: выбрать сервис</span>
       </div>
       <div class="legend-card">
         <span class="legend-dot accent"></span>
@@ -315,7 +465,7 @@ const configs = {
         <span class="legend-dot child"></span>
         <span>Зелёный: дочерние модули</span>
       </div>
-      <button class="ghost-button" @click="resetGraph">Сбросить фокус</button>
+      <button class="ghost-button" @click="resetGraph">Сбросить вид</button>
     </div>
 
     <v-network-graph
@@ -323,12 +473,37 @@ const configs = {
       :nodes="displayNodes"
       :edges="displayEdges"
       :layouts="displayLayouts"
-      :zoom-level="graphStore.zoomLevel"
       :selected-nodes="displayNodes[graphStore.selectedNode] ? [graphStore.selectedNode] : []"
       :configs="configs"
       :event-handlers="eventHandlers"
-      @update:zoomLevel="graphStore.zoomLevel = $event"
       @update:layouts="graphStore.layouts = $event"
-    />
+    >
+      <template #edge-label="{ edge, area, hovered, selected, scale }">
+        <VEdgeLabel
+          v-if="formatEdgeLabel(edge.label)"
+          :edge="edge"
+          :area="area"
+          :text="formatEdgeLabel(edge.label)"
+          :hovered="hovered"
+          :selected="selected"
+          :scale="scale"
+          align="center"
+          vertical-align="below"
+          :config="{
+            fontFamily: `'Avenir Next', 'Segoe UI', sans-serif`,
+            fontSize: isFocusedEdge(edge.id) ? 11 : 10,
+            color: isFocusedEdge(edge.id) ? '#2f4154' : '#6f8296',
+            margin: isFocusedEdge(edge.id) ? 10 : 8,
+            padding: 8,
+            background: {
+              visible: true,
+              color: isFocusedEdge(edge.id) ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.94)',
+              padding: { vertical: 2, horizontal: 6 },
+              borderRadius: 6,
+            },
+          }"
+        />
+      </template>
+    </v-network-graph>
   </div>
 </template>

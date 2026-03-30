@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import yaml from "js-yaml";
+import { normalizeEntityId } from "./graphBuilder";
 
 export async function parseZip(file) {
   const zip = await JSZip.loadAsync(file);
@@ -45,8 +46,11 @@ export async function parseZip(file) {
     const parsed = yaml.load(yamlContent);
 
     // ✅ ПРАВИЛЬНЫЙ ПАРСИНГ
-    const id = parsed?.metadata?.name || folder;
-    const name = parsed?.metadata?.displayName || id;
+    const rawId = parsed?.metadata?.name || folder;
+    const id = normalizeEntityId(rawId) || folder;
+    const name = parsed?.metadata?.displayName || rawId;
+    const entityKind = String(parsed?.kind || "Component").toLowerCase();
+    const entityType = String(parsed?.spec?.type || "").toLowerCase();
     const relations = parsed?.spec?.relations || [];
 
     let readmeContent = null;
@@ -57,7 +61,10 @@ export async function parseZip(file) {
     services.push({
       folder,
       id,
+      rawId,
       name,
+      entityKind,
+      entityType,
       relations,
       yamlRaw: yamlContent,
       readmeRaw: readmeContent,

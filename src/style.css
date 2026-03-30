@@ -30,11 +30,15 @@ input {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 460px;
+  grid-template-columns: minmax(0, 1fr) 660px;
   height: 100vh;
   gap: 20px;
   padding: 20px;
   overflow: hidden;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr) 0;
 }
 
 .main-panel {
@@ -142,7 +146,8 @@ input {
 }
 
 .upload-stats,
-.frame-stats {
+.frame-stats,
+.frame-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
@@ -228,6 +233,36 @@ input {
   color: #9aaabd;
 }
 
+.graph-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid #e2e8ef;
+  background: #ffffff;
+}
+
+.graph-mode-tab {
+  padding: 10px 0 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #72869b;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.graph-mode-tab.active {
+  border-bottom-color: #6f859c;
+  color: #31455b;
+}
+
+.graph-mode-tab:hover {
+  color: #53677d;
+}
+
 .legend-card,
 .ghost-button {
   display: inline-flex;
@@ -271,6 +306,31 @@ input {
   overflow: auto;
   min-width: 0;
   min-height: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.sidebar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(16px);
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sidebar-close {
+  border: 1px solid #e1e7ee;
+  background: #ffffff;
+  color: #60748b;
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
 }
 
 .sidebar-card,
@@ -366,7 +426,8 @@ input {
 .markdown-body ul,
 .markdown-body ol,
 .markdown-body blockquote,
-.markdown-body pre {
+.markdown-body pre,
+.markdown-body table {
   margin: 0 0 1em;
 }
 
@@ -377,6 +438,29 @@ input {
 
 .markdown-body li + li {
   margin-top: 0.35em;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #e3e8ef;
+  margin: 1.2em 0;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e1e7ee;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: #f4f7fa;
 }
 
 .markdown-body a {
