@@ -9,8 +9,10 @@ export const graphStore = reactive({
   layouts: {
     nodes: {},
   },
+  graphRevision: 0,
   zoomLevel: 1,
   graphMode: "all",
+  activeTags: [],
 
   serviceMap: {},
 

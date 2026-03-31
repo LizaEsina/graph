@@ -15,27 +15,25 @@ const sidebarOpen = ref(true);
     <div class="main-panel">
       <UploadPanel />
       <div class="graph-frame">
-        <div class="frame-header">
-          <div>
-            <h2>Карта зависимостей</h2>
-          </div>
-
+        <div class="frame-header compact no-title">
+          <div id="graph-header-controls" class="frame-header-controls"></div>
           <div class="frame-actions">
-            <div class="stat-chip">
+            <div class="stat-chip compact">
               <span class="stat-label">Нод</span>
               <strong>{{ visibleNodeCount }}</strong>
             </div>
-            <div class="stat-chip">
+            <div class="stat-chip compact">
               <span class="stat-label">Связей</span>
               <strong>{{ visibleEdgeCount }}</strong>
             </div>
-            <button class="secondary-control" type="button" @click="sidebarOpen = !sidebarOpen">
-              {{ sidebarOpen ? "Скрыть панель" : "Показать панель" }}
-            </button>
           </div>
         </div>
 
-        <GraphView class="graph-canvas" />
+        <GraphView
+          class="graph-canvas"
+          :sidebar-open="sidebarOpen"
+          @toggle-sidebar="sidebarOpen = !sidebarOpen"
+        />
       </div>
     </div>
 

@@ -8,13 +8,12 @@ export async function parseZip(file) {
   const services = [];
   const filesByFolder = {};
 
-  // группируем по ВТОРОМУ уровню (после root папки)
   Object.keys(zip.files).forEach((path) => {
     const parts = path.split("/");
 
     if (parts.length < 3) return;
 
-    const folder = parts[1]; // ВАЖНО
+    const folder = parts[1]; 
 
     if (!filesByFolder[folder]) {
       filesByFolder[folder] = [];
@@ -23,7 +22,6 @@ export async function parseZip(file) {
     filesByFolder[folder].push(path);
   });
 
-  // обрабатываем каждую папку
   for (const folder in filesByFolder) {
     const files = filesByFolder[folder];
 
@@ -45,10 +43,10 @@ export async function parseZip(file) {
     const yamlContent = await zip.files[yamlFile].async("string");
     const parsed = yaml.load(yamlContent);
 
-    // ✅ ПРАВИЛЬНЫЙ ПАРСИНГ
     const rawId = parsed?.metadata?.name || folder;
     const id = normalizeEntityId(rawId) || folder;
     const name = parsed?.metadata?.displayName || rawId;
+    const tags = Array.isArray(parsed?.metadata?.tags) ? parsed.metadata.tags : [];
     const entityKind = String(parsed?.kind || "Component").toLowerCase();
     const entityType = String(parsed?.spec?.type || "").toLowerCase();
     const relations = parsed?.spec?.relations || [];
@@ -63,6 +61,7 @@ export async function parseZip(file) {
       id,
       rawId,
       name,
+      tags,
       entityKind,
       entityType,
       relations,

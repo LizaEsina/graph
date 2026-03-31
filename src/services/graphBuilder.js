@@ -106,7 +106,6 @@ function collectAliases(service) {
     };
     const relationDebug = [];
   
-    // ✅ 1. создаём ноды (БЕЗ edgeId)
     services.forEach((s) => {
       serviceMap[s.id] = s;
       localServiceIds.add(s.id);
@@ -123,7 +122,6 @@ function collectAliases(service) {
       });
     });
   
-    // ✅ 2. создаём связи
     let edgeId = 0;
   
     services.forEach((s) => {

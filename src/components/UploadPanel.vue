@@ -74,8 +74,10 @@ async function handleUpload(event) {
   graphStore.fullNodes = graph.nodes;
   graphStore.fullEdges = graph.edges;
   graphStore.serviceMap = graph.serviceMap;
+  graphStore.graphRevision += 1;
 
   resetGraph();
+  event.target.value = "";
 }
 
 function resetGraph() {
@@ -90,6 +92,7 @@ function resetGraph() {
 
   graphStore.selectedNode = null;
   graphStore.selectedService = null;
+  graphStore.activeTags = [];
   graphStore.focusedNodes = new Set();
   graphStore.focusedEdges = new Set();
   graphStore.expandedNodes = new Set();
@@ -106,8 +109,10 @@ function clearStoredData() {
   graphStore.nodes = {};
   graphStore.edges = {};
   graphStore.layouts = { nodes: {} };
+  graphStore.graphRevision += 1;
   graphStore.zoomLevel = 1;
   graphStore.graphMode = "all";
+  graphStore.activeTags = [];
   graphStore.serviceMap = {};
   graphStore.selectedNode = null;
   graphStore.selectedService = null;
@@ -122,25 +127,24 @@ function clearStoredData() {
 </script>
 
 <template>
-  <div class="upload-panel">
-
+  <div class="upload-panel compact">
     <div class="upload-actions">
-      <label class="upload-control">
+      <label class="upload-control compact">
         <span>Загрузить ZIP</span>
         <input type="file" accept=".zip" @change="handleUpload" />
       </label>
 
-      <button class="secondary-control" type="button" @click="clearStoredData">
+      <button class="secondary-control compact" type="button" @click="clearStoredData">
         Очистить данные
       </button>
     </div>
 
     <div class="upload-stats">
-      <div class="stat-chip">
+      <div class="stat-chip compact">
         <span class="stat-label">Сервисов</span>
         <strong>{{ serviceCount }}</strong>
       </div>
-      <div class="stat-chip">
+      <div class="stat-chip compact">
         <span class="stat-label">Формат</span>
         <strong>ZIP</strong>
       </div>

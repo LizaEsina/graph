@@ -1,9 +1,39 @@
 const DEFAULT_GRID_COLUMNS = 3;
-const CLUSTER_RING_STEP = 620;
-const CLUSTER_START_RADIUS = 380;
-const OVERVIEW_RADIUS = 220;
-const FOCUS_RADIUS = 230;
-const OUTER_RADIUS = 430;
+const CLUSTER_RING_STEP = 1040;
+const CLUSTER_START_RADIUS = 660;
+const OVERVIEW_RADIUS = 340;
+const FOCUS_RADIUS = 300;
+const OUTER_RADIUS = 620;
+const LARGE_COMPONENT_THRESHOLD = 9;
+
+function placeNodesOnRings(ids, center) {
+  const layouts = {};
+  let placed = 0;
+  let ring = 0;
+
+  while (placed < ids.length) {
+    const capacity = ring === 0 ? 6 : 8 + ring * 4;
+    const nodesInRing = Math.min(capacity, ids.length - placed);
+    const radius = 280 + ring * 260;
+    const angleOffset = ring % 2 === 0 ? -Math.PI / 2 : -Math.PI / 2 + Math.PI / nodesInRing;
+
+    for (let index = 0; index < nodesInRing; index += 1) {
+      const nodeId = ids[placed + index];
+      const angle = angleOffset + (Math.PI * 2 * index) / nodesInRing;
+      const point = polarToCartesian(radius, angle);
+
+      layouts[nodeId] = {
+        x: center.x + point.x,
+        y: center.y + point.y,
+      };
+    }
+
+    placed += nodesInRing;
+    ring += 1;
+  }
+
+  return layouts;
+}
 
 function polarToCartesian(radius, angle) {
   return {
@@ -29,7 +59,12 @@ function createClusterCenters(count) {
 
     for (let index = 0; index < itemsInRing; index += 1) {
       const angle = angleOffset + (Math.PI * 2 * index) / itemsInRing;
-      centers.push(polarToCartesian(radius, angle));
+      const center = polarToCartesian(radius, angle);
+      const drift = ring === 0 ? 0 : 105 + ring * 32;
+      centers.push({
+        x: center.x + (index % 2 === 0 ? drift : -drift),
+        y: center.y + (index % 3 === 0 ? -drift * 0.6 : drift * 0.6),
+      });
     }
 
     placed += itemsInRing;
@@ -99,9 +134,14 @@ export function createGridLayouts(nodes, edges = {}, columns = DEFAULT_GRID_COLU
     const center = clusterCenters[componentIndex] || { x: 0, y: 0 };
     const componentSizeBoost = Math.max(0, component.length - 1) * 18;
 
+    if (component.length >= LARGE_COMPONENT_THRESHOLD) {
+      Object.assign(layouts, placeNodesOnRings(component, center));
+      return;
+    }
+
     if (component.length === 1) {
       const angle = (componentIndex % 2 === 0 ? -1 : 1) * (Math.PI / 10);
-      const point = polarToCartesian(36 + componentSizeBoost, angle);
+      const point = polarToCartesian(44 + componentSizeBoost, angle);
       layouts[component[0]] = {
         x: center.x + point.x,
         y: center.y + point.y,
@@ -109,7 +149,7 @@ export function createGridLayouts(nodes, edges = {}, columns = DEFAULT_GRID_COLU
       return;
     }
 
-    const radius = Math.max(OVERVIEW_RADIUS, 120 + component.length * 24);
+    const radius = Math.max(OVERVIEW_RADIUS, 195 + component.length * 28);
     const componentAngleOffset = componentIndex % 2 === 0 ? -Math.PI / 2 : -Math.PI / 2 + Math.PI / component.length;
 
     component.forEach((id, index) => {
@@ -174,10 +214,18 @@ export function createGridLayouts(nodes, edges = {}, columns = DEFAULT_GRID_COLU
         ? -Math.PI / 4
         : Math.atan2(anchorCenter.y, anchorCenter.x);
 
+    const slotsPerRing = 6;
+
     ghostIds.forEach((ghostId, index) => {
-      const spread = ghostIds.length === 1 ? 0 : (index / (ghostIds.length - 1) - 0.5) * 1.2;
-      const angle = baseAngle + spread;
-      const radius = 170 + Math.floor(index / 5) * 40;
+      const ringIndex = Math.floor(index / slotsPerRing);
+      const ringStart = ringIndex * slotsPerRing;
+      const itemsInRing = Math.min(slotsPerRing, ghostIds.length - ringStart);
+      const slotIndex = index - ringStart;
+      const arc = Math.min(Math.PI * 1.5, 0.9 + itemsInRing * 0.32);
+      const angleOffset =
+        itemsInRing === 1 ? 0 : -arc / 2 + (arc * slotIndex) / (itemsInRing - 1);
+      const angle = baseAngle + angleOffset + (ringIndex % 2 === 0 ? 0 : 0.18);
+      const radius = 560 + anchors.length * 38 + ringIndex * 210;
       const point = polarToCartesian(radius, angle);
 
       layouts[ghostId] = {
@@ -193,7 +241,7 @@ export function createGridLayouts(nodes, edges = {}, columns = DEFAULT_GRID_COLU
     }
 
     const angle = (Math.PI * 2 * index) / Math.max(ghostIds.length, 1) - Math.PI / 2;
-    const point = polarToCartesian(OVERVIEW_RADIUS + 200, angle);
+    const point = polarToCartesian(OVERVIEW_RADIUS + 760, angle);
     layouts[ghostId] = {
       x: point.x,
       y: point.y,
