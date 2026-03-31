@@ -8,6 +8,8 @@ import { clearGraphStorePersistence } from "../services/storePersistence";
 import { graphStore } from "../store/graphStore";
 
 const serviceCount = computed(() => Object.keys(graphStore.serviceMap).length);
+const visibleNodeCount = computed(() => Object.keys(graphStore.nodes).length);
+const visibleEdgeCount = computed(() => Object.keys(graphStore.edges).length);
 
 async function handleUpload(event) {
   const file = event.target.files[0];
@@ -143,6 +145,14 @@ function clearStoredData() {
       <div class="stat-chip compact">
         <span class="stat-label">Сервисов</span>
         <strong>{{ serviceCount }}</strong>
+      </div>
+      <div class="stat-chip compact">
+        <span class="stat-label">Нод</span>
+        <strong>{{ visibleNodeCount }}</strong>
+      </div>
+      <div class="stat-chip compact">
+        <span class="stat-label">Связей</span>
+        <strong>{{ visibleEdgeCount }}</strong>
       </div>
       <div class="stat-chip compact">
         <span class="stat-label">Формат</span>

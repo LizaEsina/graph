@@ -36,15 +36,15 @@ const MAX_LAYOUT_ABS = 20000;
 const zoomTier = computed(() => {
   const zoom = zoomLevel.value || 1;
 
-  if (zoom < 0.12) {
+  if (zoom < 0.11) {
     return "far";
   }
 
-  if (zoom < 0.3) {
+  if (zoom < 0.28) {
     return "mid";
   }
 
-  if (zoom < 0.6) {
+  if (zoom < 0.56) {
     return "near";
   }
 
@@ -850,41 +850,39 @@ const configs = {
 
 <template>
   <div class="graph-view">
-    <Teleport to="#graph-header-controls">
-      <div class="graph-controls">
-        <div class="graph-toolbar">
-          <label class="search-field">
-            <input
-              v-model="graphStore.searchQuery"
-              type="text"
-              placeholder="Поиск сервиса"
-            />
-          </label>
-          <button class="secondary-chip" type="button" @click="tagsModalOpen = true">
-            Теги
-            <span class="chip-count" :class="{ active: selectedTags.size > 0 }">
-              {{ selectedTags.size > 0 ? selectedTags.size : availableTags.length }}
-            </span>
-          </button>
-          <div class="legend-card compact">
-            <span class="legend-dot primary"></span>
-            <span>Клик: выбрать сервис</span>
-          </div>
-          <div class="legend-card compact">
-            <span class="legend-dot accent"></span>
-            <span>Двойной клик: открыть в фокусе и углубить</span>
-          </div>
-          <div class="legend-card compact">
-            <span class="legend-dot child"></span>
-            <span>Зелёный: дочерние модули</span>
-          </div>
-          <button class="secondary-chip" type="button" @click="emit('toggle-sidebar')">
-            {{ sidebarOpen ? "Скрыть панель" : "Показать панель" }}
-          </button>
-          <button class="ghost-button" @click="resetGraph">Сбросить вид</button>
+    <div class="graph-controls">
+      <div class="graph-toolbar">
+        <label class="search-field">
+          <input
+            v-model="graphStore.searchQuery"
+            type="text"
+            placeholder="Поиск сервиса"
+          />
+        </label>
+        <button class="secondary-chip" type="button" @click="tagsModalOpen = true">
+          Теги
+          <span class="chip-count" :class="{ active: selectedTags.size > 0 }">
+            {{ selectedTags.size > 0 ? selectedTags.size : availableTags.length }}
+          </span>
+        </button>
+        <div class="legend-card compact">
+          <span class="legend-dot primary"></span>
+          <span>Клик: выбрать сервис</span>
         </div>
+        <div class="legend-card compact">
+          <span class="legend-dot accent"></span>
+          <span>Двойной клик: открыть в фокусе и углубить</span>
+        </div>
+        <div class="legend-card compact">
+          <span class="legend-dot child"></span>
+          <span>Зелёный: дочерние модули</span>
+        </div>
+        <button class="secondary-chip" type="button" @click="emit('toggle-sidebar')">
+          {{ sidebarOpen ? "Скрыть панель" : "Показать панель" }}
+        </button>
+        <button class="ghost-button" @click="resetGraph">Сбросить вид</button>
       </div>
-    </Teleport>
+    </div>
 
     <div v-if="tagsModalOpen" class="tags-modal-backdrop" @click="closeTagsModal">
       <div class="tags-modal" role="dialog" aria-modal="true" aria-label="Фильтр по тегам" @click.stop>
@@ -924,6 +922,7 @@ const configs = {
     <v-network-graph
       :key="graphStore.graphRevision"
       ref="graphRef"
+      class="graph-network"
       :nodes="displayNodes"
       :edges="displayEdges"
       :layouts="displayLayouts"
